@@ -1,5 +1,5 @@
 // Global variables
-var scene, camera, renderer, platformMesh, ceilingPlatform, pLight, bg;
+var scene, camera, renderer, platformMesh, ceilingPlatform, pLight, bg, engine;
 var gapFExists = false;
 var gapCExists = false;
 var gapFStartX = 0;
@@ -7,7 +7,9 @@ var gapFEndX = 0;
 var gapCStartX = 0;
 var gapCEndX = 0;
 var xPosG = 0;
+var xPosGPrev = 0;
 var xPosC = 0;
+var xPosCPrev = 0;
 var cameraXPos = 0;
 var speed = 10;
 var objectRot = 0.2;
@@ -17,7 +19,9 @@ var firstGenerat = true;
 var runGame = false;
 var obstacleXposPrev = 0;
 var worldGroup = new THREE.Group();
-var xPosArray = [];
+var obstaclesXPosArray = [];
+var clock = new THREE.Clock();
+var collidableMeshList = [];
 //KEYBOARD
 var keyboard = new THREEx.KeyboardState();
 var zacetekSkoka = 0;
@@ -38,6 +42,8 @@ var tweenUpDown;
 var tweenDownUp;
 var tweenDownDown;
 var tweenBullet;
+var deltaGor;
+var deltaDol;
 //OBJEKTI//
 var sphere;
 var opponent;
@@ -47,23 +53,75 @@ var strel;
 var whiteNoise;
 var gravity;
 var alienSound;
+var SpaceParticle = {
+	starfield :
+	{
+		positionStyle    : Type.CUBE,
+		positionBase     : new THREE.Vector3( -50, 0, 0 ),
+		positionSpread   : new THREE.Vector3( 600, 400, 600 ),
 
+		velocityStyle    : Type.CUBE,
+		velocityBase     : new THREE.Vector3( 0, 0, 0 ),
+		velocitySpread   : new THREE.Vector3( 0.5, 0.5, 0.5 ), 
+		
+		angleBase               : 0,
+		angleSpread             : 720,
+		angleVelocityBase       : 0,
+		angleVelocitySpread     : 4,
+
+		particleTexture : THREE.ImageUtils.loadTexture( 'assets/star.png' ),
+		
+		sizeBase    : 10.0,
+		sizeSpread  : 2.0,				
+		colorBase   : new THREE.Vector3(0.15, 1.0, 0.9), // H,S,L
+		colorSpread : new THREE.Vector3(0.00, 0.0, 0.2),
+		opacityBase : 1,
+
+		particlesPerSecond : 20000,
+		particleDeathAge   : 60.0,		
+		emitterDeathAge    : 0.1
+	},
+	startunnel:	{
+		positionStyle  : Type.CUBE,
+		positionBase   : new THREE.Vector3( -50, 0, 200 ),
+		positionSpread : new THREE.Vector3( 600, 400, 600 ),
+
+		velocityStyle  : Type.CUBE,
+		velocityBase   : new THREE.Vector3( -50, 0, 0 ),
+		velocitySpread : new THREE.Vector3( 0.5, 0.5, 0.5 ), 
+		
+		angleBase               : 0,
+		angleSpread             : 720,
+		angleVelocityBase       : 0,
+		angleVelocitySpread     : 4,
+		
+		particleTexture : THREE.ImageUtils.loadTexture( 'assets/star.png' ),
+
+		sizeBase    : 4.0,
+		sizeSpread  : 2.0,				
+		colorBase   : new THREE.Vector3(0.15, 1.0, 0.8), // H,S,L
+		opacityBase : 1,
+		blendStyle  : THREE.AdditiveBlending,
+
+		particlesPerSecond : 500,
+		particleDeathAge   : 4.0,		
+		emitterDeathAge    : 60
+	}
+}
 
 //HOMESCREEN HIDING//
 function start() {
 	$("#homescreen").hide();
-	$("#canvas").show();
+	$("#gameOverScreen").hide();
+	collidableMeshList = [];
 	init();
-	animate();
-}
-window.onload = function() {
-	$("#canvas").show();
-	init();
+	$("#loadingScreen").show();
 	generateTerain();
-	generateObstacle();
+	$("#loadingScreen").hide();
+	$("#canvas").show();
+	runGame = true;
 	animate();
 }
-
 function init(){
 	
 	//SCENE//
@@ -94,23 +152,10 @@ function init(){
 	sphereMaterial.map = THREE.ImageUtils.loadTexture('./assets/earth.gif');
 	sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 	scene.add(sphere);
-	//NASPROTNIK
-	var opponentGeometry = new THREE.SphereGeometry(9,32,32);
-	var opponentMaterial = new THREE.MeshPhongMaterial({color: 0xFF0000});
-	opponent = new THREE.Mesh(opponentGeometry, opponentMaterial);
-	scene.add(opponent);
-	//BULLET
-	var bulletGeometry = new THREE.CylinderGeometry(1.5,0.5,8,32);
-	var bulletMaterial = new THREE.MeshPhongMaterial();
-	bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
-	scene.add(bullet);
-	//ZACETNA POZICIJA METKA
-	bullet.position.x = 100;
-	bullet.position.y = -50;
-	bullet.rotation.z = 4.71;
-	//ZACETNA POZICIJA NASPROTNIKA
-	opponent.position.x = 100;
-	opponent.position.y = -50;
+	// Particles
+	engine = new ParticleEngine();
+	engine.setValues(SpaceParticle.startunnel);
+	engine.initialize();	
 
 	//ZACETNA POZICIJA KROGLE
 	sphere.position.y = -50;
@@ -146,15 +191,9 @@ function init(){
 	tweenDownDown.easing(TWEEN.Easing.Quadratic.In);
 	// POVEZAVA DOWN UP IN DOWN DOWN
 	tweenDownUp.chain(tweenDownDown);
-	// ANIMACIJA METKA
-	tweenBullet = new TWEEN.Tween(bullet.position);
-	tweenBullet.to({x: "-1000"}, 8000);
-	tweenBullet.easing(TWEEN.Easing.Linear.None);
-	tweenBullet.repeat(Infinity);
-	tweenBullet.start();
 	//CAMERA//
-	camera = new THREE.PerspectiveCamera(45, WIDTH/HEIGHT, 0.1, 1000);
-	camera.position.set(-150,0,200);
+	camera = new THREE.PerspectiveCamera(45, WIDTH/HEIGHT, 0.1, 2000);
+	camera.position.set(-206,0,144);
 	var cLAXPos = sphere.position.x;
 	camera.lookAt(new THREE.Vector3(cLAXPos, 0, 0));
 	scene.add(camera);
@@ -174,10 +213,10 @@ function generateTerain() {
 		// Platform geometry
 		var platformGeometry = new THREE.BoxGeometry(partLength, 10, 30);
 		// Faces textures
-		var platformTextureT = THREE.ImageUtils.loadTexture("./assets/groundT.png");
-		var platformTextureF = THREE.ImageUtils.loadTexture("./assets/groundF.png");
-		var platformTextureS = THREE.ImageUtils.loadTexture("./assets/groundS.png");
-		var platformTextureB = THREE.ImageUtils.loadTexture("./assets/groundB.png");
+		var platformTextureT = THREE.ImageUtils.loadTexture("./assets/platformTop.png");
+		var platformTextureF = THREE.ImageUtils.loadTexture("./assets/platformFront.png");
+		var platformTextureS = THREE.ImageUtils.loadTexture("./assets/platformSide.png");
+		var platformTextureB = THREE.ImageUtils.loadTexture("./assets/platformBottom.png");
 		// Faces materials
 		var materialsG = [];
 		materialsG.push(new THREE.MeshLambertMaterial({ map: platformTextureS })); // right face
@@ -189,7 +228,16 @@ function generateTerain() {
 		var platformMaterial = new THREE.MeshFaceMaterial(materialsG);
 		// platform mesh
 		platformMesh = new THREE.Mesh(platformGeometry, platformMaterial);
-		// get positions 		
+		// Obstacles
+		// Obstacle geometry
+		var obstacleGeometry = new THREE.BoxGeometry(30, 30, 30);
+		// Obstacle texture
+		var obstacleTexture = THREE.ImageUtils.loadTexture("./assets/crate.png");
+		// Obstacle material
+		var obstacleMaterial = new THREE.MeshLambertMaterial({map: obstacleTexture});
+		// Obstacle mesh
+		var obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+					
 		if(firstGenerat) { 
 			for(var i = -550 + partLength; i <= 200; i += partLength) {
 				var temp = platformMesh.clone();
@@ -214,31 +262,65 @@ function generateTerain() {
 			// make gap in ground
 			if(gapF > 0.5 && !gapFExists) {
 				gapFExists = true;
-				gapFstartX = xPosG + partLength / 2;
+				gapFStartX = xPosG + partLength / 2;
 				xPosG += partLength + gapLength;
-				xPosArray.push({xPos: xPosG, yPos: -44});
 				gapFEndX = xPosG - partLength / 2;
 				for(var gapI = xPosC; gapI < gapFEndX; gapI += partLength) {
 					xPosC = gapI;
-					// CeilingPlatform mesh
 					var temp = platformMesh.clone();
-					// CeilingPlatform position
 					temp.position.x = xPosC;
 					temp.position.y = 64;
-					// Add ceilingPlatform to scene
 					temp.matrixAutoUpdate = false;
 					temp.updateMatrix();
 					worldGroup.add(temp);
-					xPosArray.push({xPos: xPosC, yPos: 44});
+					// obstacle generate
+					var makeObstacle = Math.random();
+					if(makeObstacle > 0.64) {
+						var t = Math.random();
+						if(t > 0.5) {
+							if(Math.abs(xPosC - xPosCPrev) >= partLength * 2) {
+								if(!obstacleExist(xPosG)) {
+									obstaclesXPosArray.push(xPosG);
+									var tempObs = obstacle.clone();
+									tempObs.position.set(xPosG, 44, 0);
+									worldGroup.add(tempObs);
+									collidableMeshList.push(tempObs);
+									xPosCPrev = xPosC;
+								}
+							}
+						}
+						else {
+							//NASPROTNIK
+							var opponentGeometry = new THREE.SphereGeometry(9,32,32);
+							var opponentMaterial = new THREE.MeshPhongMaterial({color: 0xFF0000});
+							opponent = new THREE.Mesh(opponentGeometry, opponentMaterial);
+							//ZACETNA POZICIJA NASPROTNIKA
+							opponent.position.x = xPosG;
+							opponent.position.y = -50;
+							worldGroup.add(opponent);
+							//BULLET
+							var bulletGeometry = new THREE.CylinderGeometry(1.5,0.5,8,32);
+							var bulletMaterial = new THREE.MeshPhongMaterial();
+							bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+							//ZACETNA POZICIJA METKA
+							bullet.position.x = xPosG;
+							bullet.position.y = -50;
+							bullet.rotation.z = 4.71;
+							worldGroup.add(bullet);
+							// ANIMACIJA METKA
+							tweenBullet = new TWEEN.Tween(bullet.position);
+							tweenBullet.to({x: "-1000"}, 8000);
+							tweenBullet.easing(TWEEN.Easing.Linear.None);
+							tweenBullet.repeat(Infinity);
+							tweenBullet.start();
+						}
+					}
 				}
 			}
 			else {
 				gapFExists = false;
 				xPosG += partLength;
-				xPosArray.push({xPos: xPosG, yPos: -44});
-				// FloorPlatform mesh
 				var temp = platformMesh.clone();
-				// FloorPlatform position
 				temp.position.x = xPosG;
 				temp.position.y = -64;
 				temp.matrixAutoUpdate = false;
@@ -249,30 +331,64 @@ function generateTerain() {
 			// make gap in ceiling
 			if(gapC > 0.5 && !gapCExists) {
 				gapCExists = true;
-				gapCstartX = xPosC + partLength / 2;
+				gapCStartX = xPosC + partLength / 2;
 				xPosC += partLength + gapLength;
-				xPosArray.push({xPos: xPosC, yPos: 44});
 				gapCEndX = xPosC - partLength / 2;
 				for(var gapI = xPosG; gapI < gapCEndX; gapI += partLength) {
 					xPosG = gapI;
-					// FloorPlatform mesh
 					var temp = platformMesh.clone();
-					// FloorPlatform position
 					temp.position.x = xPosG;
 					temp.position.y = -64;
 					temp.matrixAutoUpdate = false;
 					temp.updateMatrix();
 					worldGroup.add(temp);
-					xPosArray.push({xPos: xPosG, yPos: -44});
+					var makeObstacle = Math.random();
+					if(makeObstacle > 0.64) {
+						var t = Math.random();
+						if(t > 0.5) {
+							if(Math.abs(xPosG - xPosGPrev) >= partLength * 2) {
+								if(!obstacleExist(xPosG)) {
+									obstaclesXPosArray.push(xPosG);
+									var tempObs = obstacle.clone();
+									tempObs.position.set(xPosG, -44, 0);
+									worldGroup.add(tempObs);
+									collidableMeshList.push(tempObs);
+									xPosGPrev = xPosG;
+								}
+							}
+						}
+						else {
+							//NASPROTNIK
+							var opponentGeometry = new THREE.SphereGeometry(9,32,32);
+							var opponentMaterial = new THREE.MeshPhongMaterial({color: 0xFF0000});
+							opponent = new THREE.Mesh(opponentGeometry, opponentMaterial);
+							//ZACETNA POZICIJA NASPROTNIKA
+							opponent.position.x = xPosC;
+							opponent.position.y = -50;
+							worldGroup.add(opponent);
+							//BULLET
+							var bulletGeometry = new THREE.CylinderGeometry(1.5,0.5,8,32);
+							var bulletMaterial = new THREE.MeshPhongMaterial();
+							bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+							//ZACETNA POZICIJA METKA
+							bullet.position.x = xPosC;
+							bullet.position.y = -50;
+							bullet.rotation.z = 4.71;
+							worldGroup.add(bullet);
+							// ANIMACIJA METKA
+							tweenBullet = new TWEEN.Tween(bullet.position);
+							tweenBullet.to({x: "-1000"}, 8000);
+							tweenBullet.easing(TWEEN.Easing.Linear.None);
+							tweenBullet.repeat(Infinity);
+							tweenBullet.start();
+						}
+					}
 				}
 			}
 			else {
 				gapCExists = false;
 				xPosC += partLength;
-				xPosArray.push({xPos: xPosC, yPos: 44});
-				// CeilingPlatform mesh
 				var temp = platformMesh.clone();
-				// CeilingPlatform position
 				temp.position.x = xPosC;
 				temp.position.y = 64;
 				temp.matrixAutoUpdate = false;
@@ -281,54 +397,43 @@ function generateTerain() {
 			}
 		}
 	}
-	generateObstacle();
 	scene.add(worldGroup);
 }
-
-function generateObstacle() {
-	var makeObstacle = Math.random();
-	if(makeObstacle > 0.64) {
-		if(xPosArray.length > 0) {
-			var obstacleGeometry = new THREE.BoxGeometry(30, 30, 30);
-			var obstacleTexture = THREE.ImageUtils.loadTexture("./assets/obstacle.png");
-			var obstacleMaterial = new THREE.MeshLambertMaterial({map: obstacleTexture});
-			var obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-			for(var i = 0; i < 30; i++) {
-				console.log("obstacle");
-				var index = Math.floor(Math.random() * xPosArray.length);
-				var el = xPosArray.splice(index, 1);
-				console.log(el[0]);
-				var temp = obstacle.clone();
-				temp.position.set(el[0].xPos, el[0].yPos, 0);
-				worldGroup.add(obstacle);
-			}
+function obstacleExist(obstacleXPos) {
+	if(obstaclesXPosArray.length > 0) {
+		for(var i = 0; i < obstaclesXPosArray.length; i++) {
+			if (obstaclesXPosArray[i] == obstacleXPos) return true;
 		}
 	}
+	return false;
 }
 function animate(){
 	requestAnimationFrame(animate);
 	whiteNoise.play();
 	alienSound.play();
-	alienSound.volume = 0.5;
+	alienSound.volume = 0.3;
 	// GRAVITY UP
 	if(keyboard.pressed("up") && tla != false && !vSkoku && !vSpremembiGravitacijeDol){
 		tla = false;
 		TWEEN.add(tweenUp);
-		tweenDown.stop();
+		tweenDown.stop(); 
 		TWEEN.remove(tweenDown);
 		tweenUp.start();
+		gravity.pause();
+		gravity.currentTime = 0;
 		gravity.play();
 		vSpremembiGravitacijeGor = true;
 		zacetekSpremembeGravitacijeGor = parseInt((new Date()).getTime());
 		
 	}
 	// GRAVITY DOWN
-	if(keyboard.pressed("down") && tla != true && !vSkoku && !vSpremembiGravitacijeGor){
-		tla = true;
+	if(keyboard.pressed("down") && tla != true && !vSkoku && !vSpremembiGravitacijeGor){		tla = true;
 		TWEEN.add(tweenDown);
 		tweenUp.stop();
 		TWEEN.remove(tweenUp);
 		tweenDown.start();
+		gravity.pause();
+		gravity.currentTime = 0;
 		gravity.play();
 		vSpremembiGravitacijeDol = true;
 		zacetekSpremembeGravitacijeDol = parseInt((new Date()).getTime());
@@ -347,7 +452,7 @@ function animate(){
 	}
 	
 	if(keyboard.pressed("space") && !vSkoku && !vSpremembiGravitacijeDol && !vSpremembiGravitacijeGor){
-		console.log("sphere jump x: "+worldGroup.position.x);
+		console.log(worldGroup.position.x );
 		if(tla){
 			TWEEN.removeAll;
 			TWEEN.add(tweenUpUp);
@@ -374,20 +479,6 @@ function animate(){
 	if(keyboard.pressed("right")){
 		worldGroup.position.x += speed;
 	}
-	if(keyboard.pressed("a")){
-		camera.position.z -= 1;
-		camera.position.x -= 1;
-		camera.lookAt(new THREE.Vector3(sphere.position.x, 0, 0));
-	}
-	if(keyboard.pressed("d")){
-		camera.position.z += 1;
-		camera.position.x += 1;
-		camera.lookAt(new THREE.Vector3(sphere.position.x, 0, 0));
-	}
-	
-	if(Math.round(sphere.position.x) >=  xPosG - 2000) {
-		//generateTerain();
-	}
 	// IZRIS
 	TWEEN.update();
 	// start game animation
@@ -401,5 +492,29 @@ function animate(){
 			sphere.rotation.z += objectRot;
 		}
 	}
+	// restart particle animation
+	if(!engine.emitterAlive) {
+		engine.emitterAge = 0;
+		engine.emitterAlive = true;
+	}
+	// Collision with obstacles
+	var originPoint = sphere.position.clone();
+	for(var vIndex = 0; vIndex < sphere.geometry.vertices.length; vIndex++) {
+		var vLocal = sphere.geometry.vertices[vIndex].clone();
+		var vGlobal = vLocal.applyMatrix4(sphere.matrix);
+		var vecDirection = vGlobal.sub(sphere.position);
+		
+		var ray = new THREE.Raycaster( originPoint, vecDirection.clone().normalize() );
+		var collisionResults = ray.intersectObjects(collidableMeshList);
+		if (collisionResults.length > 0 && collisionResults[0].distance < vecDirection.length()) {
+			if(worldGroup.position.x != 0) {
+				runGame = false;
+				$("#canvas").hide();
+				$("#gameOverScreen").show();
+			}
+		}
+	}
 	renderer.render(scene, camera);
+	var dt = clock.getDelta();
+	engine.update( dt * 0.5 );
 }
