@@ -1,21 +1,57 @@
-#homescreen{
-	background-color: #E65C5C;
-	height: 600px;
+body{
+	background-image: url("../assets/startImage.jpg");
+	background-size:   cover;                      
+    background-repeat: no-repeat;
+    background-position: center center; 
+}
+h2 {
+	text-align: center;
+	font-family: helvetica;
+	font-size: 36px;
+	color: #ffffff;
+}
+p {
+	text-align: center;
+	font-family: helvetica;
+	font-size: 24px;
+	color: #ffffff;
 }
 #homescreen h1{
 	text-align: center;
 	font-family: helvetica;
 	font-size: 48px;
 	padding-top: 50px;
-
+	color: #ffffff;
 }
 #homescreen div{
 	text-align: center;
 	font-family: helvetica;
 
 }
-
-
+#loadingScreen{
+	display: none;
+	background-color: #000000;
+	height: 600px;
+	width: 786px;
+}
+#gameOverScreen {
+	display: none;
+}
+#gameOverScreen h1{
+	text-align: center;
+	font-family: helvetica;
+	font-size: 48px;
+	padding-top: 50px;
+	color: #ffffff;
+}
+span{
+	text-align: center;
+	font-family: helvetica;
+	font-size: 48px;
+	position: absolute;
+	margin: 250px 0px 0px 200px;
+	color: #ffffff;
+}
 #StartButton {
 	position: relative;
 	margin-left: 670px;

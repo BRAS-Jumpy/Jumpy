@@ -8,24 +8,34 @@
 		<script type='text/javascript' src='./scripts/tween.js'></script>
 		<script src='./scripts/threex.keyboardstate.js'></script>
 		<script src='./scripts/jquery.js'></script>
+		<script src='./scripts/ParticleEngine.js'></script>
+		<script src="./scripts/physi.js"></script>
 		<script src="./scripts/jumpy.js"></script>
 	</head>
 	<body style="margin: 0">
-	<!--
+
 		<div id="homescreen">
 			<h1>Jumpy Ball</h1 >
 			<div>
-			Up ... Gravity up
-			<br></<br>
-			<br></<br>
-			Down ... Gravity down
-			<br></<br>
-			<br></<br>
-			Space ... Jump
+				<br />
+				<h2>Controls: </h2>
+				<p>Up ... Gravity up</p>
+				<br></<br>
+				<br></<br>
+				<p>Down ... Gravity down</p>
+				<br></<br>
+				<br></<br>
+				<p>Space ... Jump</p>
 			</div>
 			<input id="StartButton" type="button" value="Start" onclick="start()">
 		</div>
-		-->
+		<div id="loadingScreen">
+			<span>Generating terain...</span>
+		</div>
+		<div id="gameOverScreen">
+			<h1>Game Over</h1>
+			<input id="StartButton" type="button" value="Try again" onclick="start()">
+		</div>
 		<canvas id="canvas"></canvas>
 		
 	</body>
